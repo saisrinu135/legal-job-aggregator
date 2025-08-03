@@ -1,0 +1,27 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# Logs
+*.log
+
+# Excel files (output data)
+*.xlsx
+
+# Environment variables
+.env
+
+# IDE files
+.vscode/
+.idea/

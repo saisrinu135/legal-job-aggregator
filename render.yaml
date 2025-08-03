@@ -1,0 +1,20 @@
+services:
+  - type: cron
+    name: legal-job-aggregator
+    runtime: python
+    plan: starter
+    region: ohio
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    schedule: "30 2 * * *'  # 2:30 AM UTC = 8:00 AM IST
+    envVars:
+      - key: TAVILY_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: EMAIL_SENDER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: EMAIL_RECIPIENT
+        sync: false
