@@ -1,4 +1,4 @@
-# Legal Job Aggregator
+# Legal Job Aggregator[![Daily Legal Job Search](https://github.com/saisrinu135/legal-job-aggregator/actions/workflows/daily-job-search.yml/badge.svg)](https://github.com/saisrinu135/legal-job-aggregator/actions/workflows/daily-job-search.yml)
 
 This application automatically searches for legal job postings in Hyderabad from various websites, extracts relevant information, and compiles it into an Excel file. It can be configured to run daily and send the results via email using Render's cron job service.
 
