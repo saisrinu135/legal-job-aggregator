@@ -47,13 +47,30 @@ logging.info("Initialization complete.")
 
 # Define job search queries focused on law-related opportunities in Hyderabad
 queries = [
-    'site:lawctopus.com "law intern" AND "apply" AND ("Hyderabad" OR "Telangana") -scholarship -course -exam',
-    'site:barandbench.com "junior lawyer" AND "job" AND Hyderabad -scholarship -admission',
-    'site:jobsforgood.com "legal associate" AND "apply" AND Hyderabad -fellowship',
-    'site:indiakanoon.org "legal internship" AND "apply" AND Hyderabad -scholarship -course',
-    'site:careerlegal.com "legal fresher" AND job AND Hyderabad -scholarship -training',
-    'site:linkedin.com/in "junior lawyer" AND Hyderabad AND ("we are hiring" OR "apply now") -scholarship -course'
+    # 🎓 Legal Internships – Lawctopus & Lawfer
+    'site:lawctopus.com ("legal internship" OR "law intern") AND ("Hyderabad" OR "Telangana") -scholarship -course -competition',
+    'site:lawfer.in ("legal internship" OR "law intern") AND ("Hyderabad" OR "Telangana") -competition -webinar -event',
+
+    # 🏢 Junior Legal Roles – LinkedIn, Indeed, Glassdoor
+    'site:linkedin.com/jobs ("junior lawyer" OR "legal associate" OR "law graduate") AND "Hyderabad" AND ("we are hiring" OR "apply now")',
+    'site:indeed.com ("legal internship" OR "junior advocate" OR "law graduate fresher") AND "Hyderabad"',
+    'site:glassdoor.co.in ("legal assistant" OR "junior lawyer" OR "LLB fresher") AND "Hyderabad"',
+
+    # 🧠 Specialized Legal Domains – IP, Contracts, Corporate Law
+    '("IP law" OR "contract drafting" OR "corporate law intern") AND "Hyderabad" AND ("law firm" OR "legal department") -training -course',
+
+    # ⚖️ Bar & Bench + Other Legal Publications
+    'site:barandbench.com ("junior lawyer" OR "legal recruitment") AND "Hyderabad"',
+    'site:lawbhoomi.com ("internship" OR "associate") AND "Hyderabad" AND "apply" -workshop -fellowship -course',
+
+    # 🧑‍⚖️ Govt & NGO Legal Openings
+    'site:nalsa.gov.in internship OR volunteer OR lok adalat "Hyderabad"',
+    'site:jobsforgood.com ("legal associate" OR "lawyer") AND "Hyderabad" AND "apply" -fellowship',
+
+    # 🌐 Open search fallback for broader visibility (for Gemini parsing)
+    '("law firm hiring" OR "legal opening") AND "Hyderabad" AND ("fresher" OR "intern" OR "junior associate")'
 ]
+
 
 logging.info(f"Starting search for {len(queries)} queries...")
 
@@ -64,7 +81,7 @@ results = []
 for query in queries:
     logging.info(f"Querying: {query}")
     # Perform web search using Tavily
-    search_results = search_tool.search(query=query, search_depth="advanced", max_results=2)
+    search_results = search_tool.search(query=query, search_depth="advanced", max_results=5)
 
     # Loop through each search result
     for result in search_results.get("results", []):
