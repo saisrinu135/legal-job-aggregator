@@ -2,6 +2,7 @@
 import os
 import datetime
 import pandas as pd
+import time
 import logging
 import smtplib
 from email.mime.multipart import MIMEMultipart
@@ -181,6 +182,7 @@ for query in queries:
                 "Posted Date": "",
                 "Source": result.get('url', '')
             })
+        time.sleep(1)
 
 # Convert results to a DataFrame and include a timestamp
 now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
