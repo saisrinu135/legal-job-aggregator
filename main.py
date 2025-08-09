@@ -81,108 +81,138 @@ results = []
 # Loop through each search query
 for query in queries:
     logging.info(f"Querying: {query}")
-    # Perform web search using Tavily
     search_results = search_tool.search(query=query, search_depth="advanced", max_results=5)
 
-    # Loop through each search result
     for result in search_results.get("results", []):
-        logging.info(f"Processing result: {result['title']}")
-        
-        # Extract detailed content from the URL using Tavily's extract method
+        main_url = result.get("url", "")
+        logging.info(f"Crawling: {main_url}")
+
         try:
-            extracted_content = search_tool.extract(urls=[result['url']])
-            print("extracted content", extracted_content)
-            raw_content = extracted_content.get("results", [])[0].get("raw_content", "") if extracted_content.get("results") else ""
-            logging.info(f"Successfully extracted content from {result['url']}")
+            crawl_response = search_tool.crawl(
+                url=main_url,
+                instructions="Find all specific job posting pages for legal interns, junior lawyers, law graduates in Hyderabad. Ignore category pages, pagination, and archive pages.",
+                max_depth=2,
+                include_domains=["glassdoor.co.in", "lawbhoomi.com", "barandbench.com", "jobsforgood.com", "nalsa.gov.in", "lawfer.in", "lawctopus.com", "linkedin.com", "indeed.com"],
+                max_breadth=3,
+                limit=10
+            )
         except Exception as e:
-            raw_content = ""
-            logging.error(f"Failed to extract content from {result['url']}: {e}")
-        
-        # Create a prompt for Gemini LLM to extract job details from title, snippet, URL and extracted content
-        prompt = f"""
-        You are a JSON extraction tool. Extract the following job details from this search result and format your response as a valid, parseable JSON object with these exact keys:
-        {{
-            "company_name": "The name of the company offering the job",
-            "job_title": "The title of the job position",
-            "recruiter": "Name of the recruiter or recruiting agency if available, otherwise empty string",
-            "email": "Contact email if available, otherwise empty string",
-            "phone": "Contact phone if available, otherwise empty string",
-            "location": "Job location",
-            "summary": "Brief job description summary (max 30 words)",
-            "application_link": "Direct link to apply for the job if different from source URL",
-            "posted_date": "Date when the job was posted if available, otherwise empty string"
-        }}
+            logging.error(f"Failed to crawl {main_url}: {e}")
+            continue
 
-        CRITICAL INSTRUCTIONS:
-        1. Return ONLY the JSON object, with no additional text, explanations, or formatting
-        2. Ensure all keys are present even if values are empty strings
-        3. Use double quotes for all keys and string values
-        4. Do not include any markdown formatting, code blocks, or backticks
-        5. Ensure the response is valid JSON that can be parsed by json.loads()
-
-        Title: {result['title']}
-        Snippet: {result['content']}
-        URL: {result['url']}
-        Extracted Content: {raw_content[:5000] if raw_content else "No additional content extracted"}
-        """
-
-        # Try to get structured data from Gemini
-        try:
-            response = llm.generate_content(prompt)
-            extracted_text = response.text.strip()
-            logging.info("Gemini response received successfully.")
+        # Filter crawled URLs to focus on actual job postings
+        crawled_urls = []
+        for crawled_page in crawl_response.get("results", []):
+            page_url = crawled_page.get("url", "").strip()
             
-            # Try to parse the JSON response
+            # Skip pagination, category, and archive pages
+            skip_patterns = [
+                "/page/", "/category/", "?page=", "?jsf=", 
+                "&meta=", "archive", "pagination", "search?"
+            ]
+            
+            # Only include URLs with job-related keywords
+            include_patterns = [
+                "internship", "job", "opportunity", "career", 
+                "hiring", "recruit", "vacancy", "position"
+            ]
+            
+            should_skip = any(pattern in page_url.lower() for pattern in skip_patterns)
+            has_job_keywords = any(pattern in page_url.lower() for pattern in include_patterns)
+            
+            if not should_skip and has_job_keywords and page_url != main_url:
+                crawled_urls.append(crawled_page)
+        
+        # Limit to first 5 relevant URLs to avoid overloading
+        crawled_urls = crawled_urls[:5]
+        logging.info(f"Processing {len(crawled_urls)} filtered job URLs from {main_url}")
+
+        # Go through each relevant crawled page and process
+        for crawled_page in crawled_urls:
+            job_url = crawled_page.get("url", "")
+            raw_content = crawled_page.get("raw_content", "")
+            
+            # # Skip if content is too short (likely not a job posting)
+            # if not raw_content or len(raw_content.strip()) < 100:
+            #     logging.warning(f"Skipping {job_url} - insufficient content")
+            #     continue
+
+            prompt = f"""
+            You are a JSON extraction tool. Extract the following job details from this search result and format your response as a valid, parseable JSON object with these exact keys:
+            {{
+                "company_name": "",
+                "job_title": "",
+                "recruiter": "",
+                "email": "",
+                "phone": "",
+                "location": "",
+                "summary": "",
+                "application_link": "",
+                "posted_date": "",
+                "still_available": "",
+                "job_department": "law or others"
+            }}
+
+            CRITICAL INSTRUCTIONS:
+            1. Return ONLY the JSON object, no extra text
+            2. Use double quotes for all keys and values
+            3. Ensure the JSON is valid
+            4. If this is not a job posting, return empty values for all fields
+
+            Title: {result.get('title', '')}
+            Snippet: {result.get('content', '')}
+            URL: {job_url}
+            Extracted Content: {raw_content[:3000] if raw_content else "No additional content extracted"}
+            """
+
             try:
+                response = llm.generate_content(prompt)
+                extracted_text = (response.text or "").strip()
+                
+                if not extracted_text:
+                    logging.warning(f"Empty response from Gemini for {job_url}")
+                    continue
+                
+                # Extract JSON from markdown code blocks if present
+                if extracted_text.startswith("```json"):
+                    # Remove markdown code block formatting
+                    extracted_text = extracted_text.replace("```json", "").replace("```", "").strip()
+                elif extracted_text.startswith("```"):
+                    # Handle generic code blocks
+                    extracted_text = extracted_text.replace("```", "").strip()
+                    
                 import json
                 job_data = json.loads(extracted_text)
                 
-                # Append structured data to the results list
-                results.append({
-                    "Company Name": job_data.get("company_name", ""),
-                    "Job Title": job_data.get("job_title", ""),
-                    "Recruiter": job_data.get("recruiter", ""),
-                    "Email": job_data.get("email", ""),
-                    "Phone": job_data.get("phone", ""),
-                    "Location": job_data.get("location", ""),
-                    "Summary": job_data.get("summary", ""),
-                    "Link": job_data.get("application_link", result['url']),
-                    "Posted Date": job_data.get("posted_date", ""),
-                    "Source": result.get('url', '')
-                })
-                logging.info("Successfully parsed structured job data.")
-            except json.JSONDecodeError as je:
-                # If JSON parsing fails, store the raw text in summary
-                logging.error(f"Failed to parse JSON response: {je}")
-                results.append({
-                    "Company Name": "",
-                    "Job Title": "",
-                    "Recruiter": "",
-                    "Email": "",
-                    "Phone": "",
-                    "Location": "",
-                    "Summary": extracted_text,  # Store raw Gemini output for review
-                    "Link": result['url'],
-                    "Posted Date": "",
-                    "Source": result.get('url', '')
-                })
-        except Exception as e:
-            # If LLM call fails, record the error in summary
-            extracted_text = f"Error generating content: {e}"
-            logging.error(f"Gemini error: {e}")
-            results.append({
-                "Company Name": "",
-                "Job Title": "",
-                "Recruiter": "",
-                "Email": "",
-                "Phone": "",
-                "Location": "",
-                "Summary": extracted_text,  # Store error message
-                "Link": result['url'],
-                "Posted Date": "",
-                "Source": result.get('url', '')
-            })
-        time.sleep(1)
+                # Only add to results if we found actual job data
+                if job_data.get("company_name") or job_data.get("job_title"):
+                    results.append({
+                        "Company Name": job_data.get("company_name", ""),
+                        "Job Title": job_data.get("job_title", ""),
+                        "Recruiter": job_data.get("recruiter", ""),
+                        "Email": job_data.get("email", ""),
+                        "Phone": job_data.get("phone", ""),
+                        "Location": job_data.get("location", ""),
+                        "Summary": job_data.get("summary", ""),
+                        "Link": job_data.get("application_link", job_url),
+                        "Posted Date": job_data.get("posted_date", ""),
+                        "Source": job_url,
+                        "Still Available": job_data.get("still_available", ""),
+                        "Job Department": job_data.get("job_department", "")
+                    })
+                else:
+                    logging.info(f"No job data found in {job_url} - skipping")
+                    
+            except json.JSONDecodeError as e:
+                logging.error(f"JSON parsing error for {job_url}: {e}")
+                # Log the actual response for debugging
+                logging.error(f"Gemini response was: {extracted_text[:200]}...")
+            except Exception as e:
+                logging.error(f"Gemini processing error for {job_url}: {e}")
+
+            time.sleep(1)
+
+
 
 # Convert results to a DataFrame and include a timestamp
 now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
